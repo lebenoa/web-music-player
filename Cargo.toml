@@ -1,0 +1,26 @@
+[package]
+name = "web-music-player"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+audiotags = { git = "https://github.com/lebenoa/audiotags" }
+id3 = "1.14.0"
+axum = { version = "0.7.7", features = ["multipart"] }
+html-escape = "0.2.13"
+image = "0.25.4"
+rusty_ytdl = { version = "0.7.4", features = ["ffmpeg"] }
+serde = { version = "1.0.213", features = ["derive"] }
+serde_json = "1.0.132"
+tokio = { version = "1.41.0", features = ["full"] }
+tower = { version = "0.5.1", features = ["util"] }
+tower-http = { version = "0.6.1", features = ["fs", "cors", "trace"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = [] }
+ytmapi-rs = "0.0.14"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+codegen-units = 1
