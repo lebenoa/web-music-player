@@ -4,7 +4,7 @@ Streaming music in LAN to any device with modern web browser
 
 ![image](https://github.com/user-attachments/assets/97a7cab2-f7ed-4afb-aef3-93ac9968d6e2)
 
-### UI Repo at ***COMING SOON***
+### ***[UI Repo](https://github.com/lebenoa/wmp-ui)***
 
 ## Requirements
 
