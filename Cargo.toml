@@ -17,7 +17,7 @@ tower = { version = "0.5.1", features = ["util"] }
 tower-http = { version = "0.6.1", features = ["fs", "cors", "trace"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [] }
-ytmapi-rs = "0.0.14"
+ytmapi-rs = "0.0.15"
 
 [profile.release]
 lto = true
