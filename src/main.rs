@@ -10,7 +10,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::VecDeque, process::Stdio, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    process::Stdio,
+    sync::Arc,
+};
 use tokio::{process::Command, sync::Mutex};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -205,7 +209,8 @@ async fn main() {
         .route("/msearch", post(search_music_api))
         .route("/crop", post(crop_api))
         .route("/edit", post(edit_api))
-        .route("/delete", post(delete_api));
+        .route("/delete", post(delete_api))
+        .route("/artist-playlist", get(group_by_artist));
 
     let app = Router::new()
         .route("/", get(index))
@@ -214,6 +219,7 @@ async fn main() {
         .route("/history", post(add_to_history))
         .route("/save-playlist", post(save_playlist))
         .route("/load-playlist", get(load_playlist))
+        .route("/clear-playlist", post(clear_playlist))
         .nest("/api", api)
         .with_state(state)
         .nest_service("/m", ServeDir::new(MUSIC_DIR))
@@ -511,6 +517,139 @@ async fn load_playlist(State(state): State<AppState>) -> impl IntoResponse {
         [(header::CONTENT_TYPE, "application/json")],
         serde_json::to_string(&*session).expect("serialize session to json"),
     )
+}
+
+async fn clear_playlist(State(state): State<AppState>) -> impl IntoResponse {
+    let mut session = state.playlist_session.lock().await;
+    if session.is_empty {
+        return (StatusCode::OK, "Ok");
+    }
+
+    *session = PlaylistSession::default();
+
+    (StatusCode::OK, "Ok")
+}
+
+//#[derive(Serialize)]
+//struct AutoPlaylist {
+//    name: String,
+//    items: Vec<Track>,
+//}
+
+async fn group_by_artist(
+    State(state): State<AppState>,
+) -> Result<Json<HashMap<String, Vec<Track>>>, String> {
+    let entries = std::fs::read_dir(MUSIC_DIR).map_err(|e| e.to_string())?;
+    let mut map: HashMap<String, Vec<Track>> = HashMap::new();
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                return Err(e.to_string());
+            }
+        };
+
+        let filename = entry.file_name().to_string_lossy().to_string();
+        let (title, ext) = {
+            let last_dot = filename.rfind('.');
+
+            match last_dot {
+                Some(d) => (filename[0..d].to_string(), filename[d + 1..].to_string()),
+                None => (filename.clone(), "mp3".to_string()),
+            }
+        };
+
+        let reader = match ext.as_str() {
+            "mp3" => state.mp3_reader.clone(),
+            "mp4" | "m4a" => state.mp4_reader.clone(),
+            _ => {
+                tracing::error!("Unrecognize format: {}", filename);
+                continue;
+            }
+        };
+        let image = format!("/img/{}.jpeg", title);
+
+        let artist = match reader.read_from_path(format!("{}/{}", MUSIC_DIR, filename)) {
+            Ok(mut tag) => {
+                if !std::path::Path::new(&image[1..]).exists() {
+                    let cover = tag.album_cover();
+                    if let Some(c) = cover {
+                        match c.mime_type {
+                            MimeType::Jpeg => {
+                                if let Err(e) = std::fs::write(&image[1..], c.data) {
+                                    tracing::error!("Failed to save image ({}): {}", filename, e);
+                                }
+                            }
+                            _ => {
+                                tracing::info!("Converting image for: {}...", filename);
+
+                                let img = image::load_from_memory_with_format(
+                                    c.data,
+                                    match c.mime_type {
+                                        MimeType::Jpeg => unreachable!("Should not be jpeg"),
+                                        MimeType::Png => image::ImageFormat::Png,
+                                        MimeType::Bmp => image::ImageFormat::Bmp,
+                                        MimeType::Gif => image::ImageFormat::Gif,
+                                        MimeType::Tiff => image::ImageFormat::Tiff,
+                                    },
+                                )
+                                .unwrap()
+                                .into_rgb8();
+
+                                let mut buffer = Vec::with_capacity(img.len());
+                                img.write_to(
+                                    &mut std::io::Cursor::new(&mut buffer),
+                                    image::ImageFormat::Jpeg,
+                                )
+                                .unwrap();
+
+                                tag.set_album_cover(Picture::new(&buffer, MimeType::Jpeg));
+                                tag.write_to_path(&format!("{}/{}", MUSIC_DIR, filename))
+                                    .unwrap();
+                                std::fs::write(&image[1..], buffer).unwrap();
+                            }
+                        }
+                    }
+                }
+
+                tag.artist().unwrap_or("Unknown").to_string()
+            }
+            Err(e) => {
+                tracing::error!("{}\n{}", e, filename);
+                continue;
+            }
+        };
+
+        let alone_artist = artist.split(", ").next().unwrap().to_string();
+        map.entry(alone_artist)
+            .and_modify(|e| {
+                e.push(Track {
+                    filename: filename.clone(),
+                    title: title.clone(),
+                    artist: artist.clone(),
+                    artists: None,
+                    thumbnail: Some(image.clone()),
+                    duration: None,
+                    artist_thumbnail: None,
+                })
+            })
+            .or_insert_with(|| {
+                vec![Track {
+                    filename,
+                    title,
+                    artist,
+                    artists: None,
+                    thumbnail: Some(image),
+                    duration: None,
+                    artist_thumbnail: None,
+                }]
+            });
+    }
+
+    map.retain(|_, v| v.len() > 1);
+
+    Ok(Json(map))
 }
 
 #[derive(Serialize, Deserialize)]

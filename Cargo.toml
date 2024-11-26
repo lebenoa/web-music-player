@@ -17,7 +17,8 @@ tower = { version = "0.5.1", features = ["util"] }
 tower-http = { version = "0.6.1", features = ["fs", "cors", "trace"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [] }
-ytmapi-rs = "0.0.15"
+ytmapi-rs = "0.0.16"
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 
 [profile.release]
 lto = true
