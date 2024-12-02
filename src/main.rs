@@ -530,12 +530,6 @@ async fn clear_playlist(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, "Ok")
 }
 
-//#[derive(Serialize)]
-//struct AutoPlaylist {
-//    name: String,
-//    items: Vec<Track>,
-//}
-
 async fn group_by_artist(
     State(state): State<AppState>,
 ) -> Result<Json<HashMap<String, Vec<Track>>>, String> {
@@ -621,30 +615,31 @@ async fn group_by_artist(
             }
         };
 
-        let alone_artist = artist.split(", ").next().unwrap().to_string();
-        map.entry(alone_artist)
-            .and_modify(|e| {
-                e.push(Track {
-                    filename: filename.clone(),
-                    title: title.clone(),
-                    artist: artist.clone(),
-                    artists: None,
-                    thumbnail: Some(image.clone()),
-                    duration: None,
-                    artist_thumbnail: None,
+        for alone_artist in artist.split(", ") {
+            map.entry(alone_artist.to_uppercase())
+                .and_modify(|e| {
+                    e.push(Track {
+                        filename: filename.clone(),
+                        title: title.clone(),
+                        artist: artist.clone(),
+                        artists: None,
+                        thumbnail: Some(image.clone()),
+                        duration: None,
+                        artist_thumbnail: None,
+                    })
                 })
-            })
-            .or_insert_with(|| {
-                vec![Track {
-                    filename,
-                    title,
-                    artist,
-                    artists: None,
-                    thumbnail: Some(image),
-                    duration: None,
-                    artist_thumbnail: None,
-                }]
-            });
+                .or_insert_with(|| {
+                    vec![Track {
+                        filename: filename.clone(),
+                        title: title.clone(),
+                        artist: artist.clone(),
+                        artists: None,
+                        thumbnail: Some(image.clone()),
+                        duration: None,
+                        artist_thumbnail: None,
+                    }]
+                });
+        }
     }
 
     map.retain(|_, v| v.len() > 1);
